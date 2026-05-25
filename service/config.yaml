@@ -1,0 +1,34 @@
+# Manometer Reader Configuration
+
+camera:
+  # ESP32-CAM snapshot URL (ESPHome camera web server)
+  url: "http://manometer-cam.local:8080/"
+  timeout: 10
+
+calibration:
+  # Needle angle (0=up, clockwise) at 0 bar on the gauge
+  angle_0bar: 220.0
+  # Total angular sweep from 0 bar to max bar (clockwise)
+  total_sweep: 270.0
+  # Maximum value on the gauge scale
+  max_bar: 3.0
+
+reading:
+  # Seconds between readings
+  interval_seconds: 300
+  # Minimum detection confidence (0-1) to accept a reading
+  min_confidence: 0.3
+  # Number of readings to median-filter over
+  median_window: 5
+  # Save annotated debug images
+  save_debug_images: false
+  debug_image_dir: "/tmp/manometer-debug"
+
+mqtt:
+  host: "localhost"
+  port: 1883
+  username: "your_mqtt_user"
+  password: "your_mqtt_password"
+  client_id: "manometer-reader"
+  topic_prefix: "manometer"
+  device_name: "Radiatortryck"

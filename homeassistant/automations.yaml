@@ -1,0 +1,37 @@
+# Example automations for manometer monitoring
+#
+# Add these to your automations.yaml or create via the HA UI.
+
+# --- Alert when pressure drops below threshold ---
+- alias: "Radiatortryck för lågt"
+  description: "Varnar om systemtrycket sjunker under 0.8 bar"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.manometer_reader_pressure
+      below: 0.8
+      for:
+        minutes: 10
+  actions:
+    - action: notify.notify
+      data:
+        title: "⚠️ Lågt radiatortryck"
+        message: >
+          Systemtrycket är {{ states('sensor.manometer_reader_pressure') }} bar.
+          Normalt drifttryck är 1.0-1.5 bar. Kontrollera om systemet behöver fyllas på.
+
+# --- Alert when pressure is too high ---
+- alias: "Radiatortryck för högt"
+  description: "Varnar om systemtrycket stiger över 2.5 bar"
+  triggers:
+    - trigger: numeric_state
+      entity_id: sensor.manometer_reader_pressure
+      above: 2.5
+      for:
+        minutes: 5
+  actions:
+    - action: notify.notify
+      data:
+        title: "🔴 Högt radiatortryck"
+        message: >
+          Systemtrycket är {{ states('sensor.manometer_reader_pressure') }} bar.
+          Trycket är i röd zon (>2.5 bar). Kontrollera expansionskärl och säkerhetsventil.

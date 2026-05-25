@@ -1,0 +1,108 @@
+# ESPHome configuration for manometer camera
+#
+# Adapt pin mappings to your ESP32-CAM board:
+#   - AI-Thinker ESP32-CAM (most common) — pins below are correct
+#   - Other boards may differ — check your board's documentation
+#
+# Flash with: esphome run manometer-cam.yaml
+
+esphome:
+  name: manometer-cam
+  friendly_name: Manometer Camera
+
+esp32:
+  board: esp32cam
+  framework:
+    type: arduino
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Optional: static IP for reliable image fetching
+  # manual_ip:
+  #   static_ip: 192.168.1.50
+  #   gateway: 192.168.1.1
+  #   subnet: 255.255.255.0
+
+  ap:
+    ssid: "Manometer-Fallback"
+    password: "configme123"
+
+captive_portal:
+
+logger:
+  level: INFO
+
+api:
+  # encryption:
+  #   key: !secret api_key
+
+ota:
+  - platform: esphome
+    # password: !secret ota_password
+
+# --- Camera ---
+esp32_camera:
+  name: Manometer
+  # AI-Thinker ESP32-CAM pin mapping
+  external_clock:
+    pin: GPIO0
+    frequency: 20MHz
+  i2c_pins:
+    sda: GPIO26
+    scl: GPIO27
+  data_pins:
+    - GPIO5   # D0
+    - GPIO18  # D1
+    - GPIO19  # D2
+    - GPIO21  # D3
+    - GPIO36  # D4
+    - GPIO39  # D5
+    - GPIO34  # D6
+    - GPIO35  # D7
+  vsync_pin: GPIO25
+  href_pin: GPIO23
+  pixel_clock_pin: GPIO22
+  power_down_pin: GPIO32
+
+  resolution: 800x600
+  jpeg_quality: 12        # Lower = better quality (10-63)
+  vertical_flip: false
+  horizontal_mirror: false
+  
+  # Low idle framerate to save power — image is fetched on demand
+  idle_framerate: 0.1fps
+
+# HTTP endpoint for snapshots: http://<ip>:8080/
+esp32_camera_web_server:
+  - port: 8080
+    mode: snapshot
+
+# Built-in web UI at http://<ip>:80/
+web_server:
+  port: 80
+
+# --- Optional: onboard LED as flash ---
+output:
+  - platform: gpio
+    pin: GPIO4
+    id: flash_led
+
+light:
+  - platform: binary
+    name: "Flash LED"
+    output: flash_led
+
+# --- Diagnostics ---
+sensor:
+  - platform: wifi_signal
+    name: "WiFi Signal"
+    update_interval: 60s
+
+  - platform: uptime
+    name: "Uptime"
+
+button:
+  - platform: restart
+    name: "Restart"

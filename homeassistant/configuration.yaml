@@ -1,0 +1,29 @@
+# Home Assistant configuration examples
+#
+# The manometer-reader service publishes MQTT discovery messages
+# automatically, so sensors appear in HA without manual config.
+#
+# Below are optional extras you can add to your configuration.yaml.
+
+# --- Optional: Template sensor with friendly formatting ---
+template:
+  - sensor:
+      - name: "Radiatortryck status"
+        state: >
+          {% set p = states('sensor.manometer_reader_pressure') | float(0) %}
+          {% if p < 0.8 %}
+            Lågt tryck
+          {% elif p < 1.5 %}
+            Normalt
+          {% elif p < 2.5 %}
+            Högt
+          {% else %}
+            Varning
+          {% endif %}
+        icon: >
+          {% set p = states('sensor.manometer_reader_pressure') | float(0) %}
+          {% if p < 0.8 or p > 2.5 %}
+            mdi:alert-circle
+          {% else %}
+            mdi:check-circle
+          {% endif %}
