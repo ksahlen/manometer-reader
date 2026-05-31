@@ -37,7 +37,7 @@ calibration:
 
 reading:
   # Seconds between readings
-  interval_seconds: 300
+  interval_seconds: 900
   # Minimum detection confidence (0-1) to accept a reading
   min_confidence: 0.3
   # Number of readings to median-filter over
