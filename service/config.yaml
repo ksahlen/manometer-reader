@@ -2,14 +2,32 @@
 
 camera:
   # ESP32-CAM snapshot URL (ESPHome camera web server)
-  url: "http://manometer-cam.local:8080/"
+  url: "http://192.168.6.35:8080/"
   timeout: 10
+  # Rotate image clockwise before analysis. Use 90 or 270 when the camera is
+  # mounted sideways. ESPHome itself only flips/mirrors the camera image.
+  rotate_degrees: 0
+
+lighting:
+  # Pulse the ESPHome WS2812B backlight before each snapshot.
+  enabled: true
+  base_url: "http://192.168.6.35"
+  entity_name: "Backlight"
+  # ESPHome web API uses 0-255 values for brightness and RGB.
+  brightness: 64
+  red: 255
+  green: 255
+  blue: 255
+  transition: 0
+  settle_seconds: 0.5
+  timeout: 5
+  turn_off_after_snapshot: true
 
 calibration:
   # Needle angle (0=up, clockwise) at 0 bar on the gauge
-  angle_0bar: 220.0
+  angle_0bar: 229.3
   # Total angular sweep from 0 bar to max bar (clockwise)
-  total_sweep: 270.0
+  total_sweep: 250.7
   # Maximum value on the gauge scale
   max_bar: 3.0
 
@@ -25,7 +43,7 @@ reading:
   debug_image_dir: "/tmp/manometer-debug"
 
 mqtt:
-  host: "localhost"
+  host: "192.168.4.11"
   port: 1883
   username: "your_mqtt_user"
   password: "your_mqtt_password"

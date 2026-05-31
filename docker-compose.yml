@@ -4,7 +4,7 @@ services:
     container_name: manometer-reader
     restart: unless-stopped
     volumes:
-      - ./service/config.yaml:/app/config.yaml:ro
+      - ./service/config.local.yaml:/app/config.yaml:ro
       - debug-images:/tmp/manometer-debug
     network_mode: host   # Simplest for mDNS/.local resolution
 

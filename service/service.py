@@ -11,8 +11,10 @@ import json
 import signal
 import sys
 import logging
+import argparse
 from pathlib import Path
 from datetime import datetime
+from urllib.parse import quote, urlsplit
 
 import cv2
 import numpy as np
@@ -59,6 +61,73 @@ def capture_image(url: str, timeout: int = 10) -> np.ndarray | None:
     except requests.RequestException as e:
         logger.error(f"Failed to capture image from {url}: {e}")
         return None
+
+
+def _camera_base_url(camera_url: str) -> str:
+    """Return scheme and host from the snapshot URL."""
+    parsed = urlsplit(camera_url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def set_backlight(
+    lighting_config: dict,
+    turn_on: bool,
+    camera_url: str,
+) -> bool:
+    """Control the ESPHome backlight through the web server API."""
+    if not lighting_config.get("enabled", False):
+        return True
+
+    base_url = lighting_config.get("base_url") or _camera_base_url(camera_url)
+    entity_name = quote(lighting_config.get("entity_name", "Backlight"), safe="")
+    action = "turn_on" if turn_on else "turn_off"
+    url = f"{base_url}/light/{entity_name}/{action}"
+
+    params = {
+        "transition": lighting_config.get("transition", 0),
+    }
+    if turn_on:
+        params.update(
+            {
+                "brightness": lighting_config.get("brightness", 64),
+                "r": lighting_config.get("red", 255),
+                "g": lighting_config.get("green", 255),
+                "b": lighting_config.get("blue", 255),
+            }
+        )
+
+    try:
+        requests.post(
+            url,
+            params=params,
+            data=b"",
+            timeout=lighting_config.get("timeout", 5),
+        ).raise_for_status()
+        logger.debug("Backlight %s", "on" if turn_on else "off")
+        return True
+    except requests.RequestException as e:
+        logger.warning("Failed to turn backlight %s: %s", "on" if turn_on else "off", e)
+        return False
+
+
+def capture_image_with_lighting(
+    camera_url: str,
+    camera_timeout: int,
+    lighting_config: dict,
+) -> np.ndarray | None:
+    """Turn on configured light, capture a snapshot, and optionally turn it off."""
+    if lighting_config.get("enabled", False):
+        set_backlight(lighting_config, True, camera_url)
+        time.sleep(lighting_config.get("settle_seconds", 0.5))
+
+    try:
+        return capture_image(camera_url, timeout=camera_timeout)
+    finally:
+        if (
+            lighting_config.get("enabled", False)
+            and lighting_config.get("turn_off_after_snapshot", True)
+        ):
+            set_backlight(lighting_config, False, camera_url)
 
 
 def setup_mqtt(config: dict) -> mqtt.Client:
@@ -171,12 +240,31 @@ def save_debug_image(image: np.ndarray, output_dir: str):
         old.unlink()
 
 
-def main():
-    config = load_config()
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments for local and VM runs."""
+    parser = argparse.ArgumentParser(description="Run the manometer reader service.")
+    parser.add_argument(
+        "--config",
+        default="config.yaml",
+        help="Path to service config YAML",
+    )
+    parser.add_argument(
+        "--once",
+        action="store_true",
+        help="Capture, read, publish once, then exit",
+    )
+    return parser.parse_args()
+
+
+def main(config_path: str = "config.yaml", run_once: bool = False):
+    config = load_config(config_path)
     
     # Camera config
     cam_config = config.get("camera", {})
     cam_url = cam_config.get("url", "http://manometer-cam.local:8080/")
+    cam_timeout = cam_config.get("timeout", 10)
+    image_rotation_degrees = cam_config.get("rotate_degrees", 0)
+    lighting_config = config.get("lighting", {})
     
     # Gauge calibration
     cal_config = config.get("calibration", {})
@@ -202,7 +290,10 @@ def main():
     publish_ha_discovery(client, topic_prefix, device_name)
     
     # Gauge reader
-    reader = GaugeReader(calibration=calibration)
+    reader = GaugeReader(
+        calibration=calibration,
+        image_rotation_degrees=image_rotation_degrees,
+    )
     reader.median_window = read_config.get("median_window", 5)
     
     # Graceful shutdown
@@ -216,13 +307,22 @@ def main():
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
     
-    logger.info(f"Starting manometer reader (interval={interval}s, camera={cam_url})")
+    logger.info(
+        "Starting manometer reader "
+        f"(interval={interval}s, camera={cam_url}, "
+        f"rotation={reader.image_rotation_degrees}°, "
+        f"lighting={'on' if lighting_config.get('enabled', False) else 'off'})"
+    )
     
     consecutive_failures = 0
     max_failures = 10
     
     while running:
-        image = capture_image(cam_url)
+        image = capture_image_with_lighting(
+            cam_url,
+            cam_timeout,
+            lighting_config,
+        )
         
         if image is not None:
             reading = reader.read(
@@ -256,6 +356,9 @@ def main():
             }), retain=True)
             consecutive_failures = 0
         
+        if run_once:
+            break
+
         # Wait for next cycle
         for _ in range(interval):
             if not running:
@@ -268,4 +371,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(config_path=args.config, run_once=args.once)

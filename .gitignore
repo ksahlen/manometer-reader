@@ -1,8 +1,11 @@
 __pycache__/
 *.pyc
+.DS_Store
 .venv/
 venv/
 *.egg-info/
 config.local.yaml
 /service/.esphome/
+/esphome/.esphome/
+/esphome/secrets.yaml
 debug_*.jpg

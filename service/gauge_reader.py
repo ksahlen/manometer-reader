@@ -58,8 +58,13 @@ class GaugeCalibration:
 class GaugeReader:
     """Reads pressure from a Beulco manometer image using computer vision."""
     
-    def __init__(self, calibration: Optional[GaugeCalibration] = None):
+    def __init__(
+        self,
+        calibration: Optional[GaugeCalibration] = None,
+        image_rotation_degrees: int = 0,
+    ):
         self.calibration = calibration or GaugeCalibration()
+        self.image_rotation_degrees = self._normalize_rotation(image_rotation_degrees)
         self._history: list[float] = []
         self.median_window = 5  # Number of readings to median-filter
     
@@ -76,6 +81,8 @@ class GaugeReader:
         Returns:
             GaugeReading or None if detection failed
         """
+        image = self._rotate_image(image)
+
         # Step 1: Find the circular gauge face
         circle = self._find_gauge_circle(image)
         if circle is None:
@@ -124,6 +131,24 @@ class GaugeReader:
     def reset_history(self):
         """Clear the median filter history."""
         self._history.clear()
+
+    @staticmethod
+    def _normalize_rotation(rotation_degrees: int) -> int:
+        """Normalize clockwise image rotation to one of 0, 90, 180, or 270."""
+        rotation = int(rotation_degrees) % 360
+        if rotation not in (0, 90, 180, 270):
+            raise ValueError("image_rotation_degrees must be 0, 90, 180, or 270")
+        return rotation
+
+    def _rotate_image(self, img: np.ndarray) -> np.ndarray:
+        """Rotate image clockwise before analysis, if configured."""
+        if self.image_rotation_degrees == 0:
+            return img
+        if self.image_rotation_degrees == 90:
+            return cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+        if self.image_rotation_degrees == 180:
+            return cv2.rotate(img, cv2.ROTATE_180)
+        return cv2.rotate(img, cv2.ROTATE_90_COUNTERCLOCKWISE)
     
     def _find_gauge_circle(self, img: np.ndarray) -> Optional[tuple[int, int, int]]:
         """Find the main circular gauge face using Hough circles."""
