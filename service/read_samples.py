@@ -23,6 +23,9 @@ IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".webp"}
 def parse_expected_pressure(path: Path) -> float | None:
     """Parse a pressure value from a filename stem."""
     name = path.stem.lower()
+    if name.startswith(("live_", "prototype")):
+        return None
+
     cleaned = (
         name.replace("pressure", "")
         .replace("bar", "")
@@ -39,7 +42,11 @@ def image_paths(input_dir: Path) -> list[Path]:
     return sorted(
         path
         for path in input_dir.iterdir()
-        if path.is_file() and path.suffix.lower() in IMAGE_SUFFIXES
+        if (
+            path.is_file()
+            and path.suffix.lower() in IMAGE_SUFFIXES
+            and not path.stem.lower().startswith(("live_", "prototype"))
+        )
     )
 
 
@@ -217,13 +224,15 @@ def main() -> int:
         if not sample["ok"]:
             print(f"{Path(sample['image']).name} {expected_text} - - - {sample['error']}")
             continue
+        error = sample["error_bar"]
+        error_text = f"{error:+.2f}" if error is not None else "-"
         print(
             f"{Path(sample['image']).name} "
             f"{expected_text} "
             f"{sample['pressure_bar']:.2f} "
             f"{sample['needle_angle_deg']:.1f} "
             f"{sample['confidence']:.2f} "
-            f"{sample['error_bar']:+.2f}"
+            f"{error_text}"
         )
 
     if suggested is not None:

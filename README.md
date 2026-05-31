@@ -83,12 +83,13 @@ The VM can pulse the ESPHome backlight around each snapshot:
 
 ```yaml
 camera:
+  rotate_degrees: 90
   warmup_snapshots: 1
   warmup_delay_seconds: 1.0
 
 lighting:
   enabled: true
-  brightness: 128
+  brightness: 255
   red: 255
   green: 255
   blue: 255

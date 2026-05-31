@@ -153,25 +153,45 @@ class GaugeReader:
     def _find_gauge_circle(self, img: np.ndarray) -> Optional[tuple[int, int, int]]:
         """Find the main circular gauge face using Hough circles."""
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        blurred = cv2.GaussianBlur(gray, (9, 9), 2)
-        
         h, w = img.shape[:2]
         min_r = min(h, w) // 6
         max_r = min(h, w) // 2
-        
-        circles = cv2.HoughCircles(
-            blurred, cv2.HOUGH_GRADIENT, dp=1.2,
-            minDist=min(h, w) // 2,
-            param1=100, param2=40,
-            minRadius=min_r, maxRadius=max_r
-        )
-        
-        if circles is None:
-            return None
-        
-        circles = np.round(circles[0]).astype(int)
-        best = max(circles, key=lambda c: int(c[2]))
-        return (int(best[0]), int(best[1]), int(best[2]))
+
+        attempts = [
+            # Primary pass: strict enough to avoid false positives on clear images.
+            ((9, 9), min_r, 40),
+            # Fallback passes for dim/noisy live snapshots. Use a larger minimum
+            # radius so we do not lock on to text or the center hub.
+            ((5, 5), min(h, w) // 4, 25),
+            ((5, 5), min(h, w) // 4, 20),
+            ((5, 5), min(h, w) // 4, 15),
+        ]
+
+        for blur_size, attempt_min_r, param2 in attempts:
+            blurred = cv2.GaussianBlur(gray, blur_size, 2)
+            circles = cv2.HoughCircles(
+                blurred, cv2.HOUGH_GRADIENT, dp=1.2,
+                minDist=min(h, w) // 2,
+                param1=100, param2=param2,
+                minRadius=attempt_min_r, maxRadius=max_r
+            )
+
+            if circles is None:
+                continue
+
+            circles = np.round(circles[0]).astype(int)
+            image_center = np.array([w / 2, h / 2])
+            best = max(
+                circles,
+                key=lambda c: int(c[2]) - 0.15 * np.linalg.norm(c[:2] - image_center),
+            )
+            logger.debug(
+                "Found gauge circle with param2=%s: center=(%s,%s), radius=%s",
+                param2, int(best[0]), int(best[1]), int(best[2])
+            )
+            return (int(best[0]), int(best[1]), int(best[2]))
+
+        return None
     
     def _crop_gauge(self, img, cx, cy, r):
         """Crop image to gauge area and create interior mask."""
