@@ -110,6 +110,18 @@ Test one full MQTT publish:
 .venv/bin/python service/service.py --config service/config.local.yaml --once
 ```
 
+For image/debug troubleshooting, enable raw/debug image saving in
+`service/config.local.yaml`:
+
+```yaml
+reading:
+  save_debug_images: true
+  save_raw_images: true
+  debug_image_dir: "/tmp/manometer-debug"
+```
+
+With Docker Compose, these files appear on the VM under `./debug-images/`.
+
 ### 3. Run with Docker (recommended)
 
 Docker Compose is the preferred VM deployment path. It keeps Python/OpenCV

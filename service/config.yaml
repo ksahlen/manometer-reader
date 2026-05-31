@@ -40,6 +40,8 @@ reading:
   median_window: 5
   # Save annotated debug images
   save_debug_images: false
+  # Save raw snapshots before analysis. Defaults to save_debug_images if omitted.
+  save_raw_images: false
   debug_image_dir: "/tmp/manometer-debug"
 
 mqtt:

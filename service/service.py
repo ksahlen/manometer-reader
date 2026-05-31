@@ -224,20 +224,38 @@ def publish_reading(client: mqtt.Client, topic: str, reading):
                 f"confidence={reading.confidence:.0%})")
 
 
-def save_debug_image(image: np.ndarray, output_dir: str):
-    """Save debug image with timestamp."""
+def save_image_artifact(
+    image: np.ndarray,
+    output_dir: str,
+    prefix: str,
+    max_keep: int = 50,
+) -> Path | None:
+    """Save an image artifact with timestamp and prune old files."""
     path = Path(output_dir)
     path.mkdir(parents=True, exist_ok=True)
     
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = path / f"debug_{timestamp}.jpg"
-    cv2.imwrite(str(filepath), image)
+    filepath = path / f"{prefix}_{timestamp}.jpg"
+    if not cv2.imwrite(str(filepath), image):
+        logger.warning("Failed to save %s image to %s", prefix, filepath)
+        return None
     
-    # Keep only the last N debug images
-    images = sorted(path.glob("debug_*.jpg"))
-    max_keep = 50
+    images = sorted(path.glob(f"{prefix}_*.jpg"))
     for old in images[:-max_keep]:
         old.unlink()
+
+    logger.info("Saved %s image: %s", prefix, filepath)
+    return filepath
+
+
+def save_debug_image(image: np.ndarray, output_dir: str):
+    """Save annotated debug image with timestamp."""
+    return save_image_artifact(image, output_dir, "debug")
+
+
+def save_raw_image(image: np.ndarray, output_dir: str):
+    """Save raw camera snapshot with timestamp."""
+    return save_image_artifact(image, output_dir, "raw")
 
 
 def parse_args() -> argparse.Namespace:
@@ -279,6 +297,7 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
     interval = read_config.get("interval_seconds", 300)
     min_confidence = read_config.get("min_confidence", 0.3)
     save_debug = read_config.get("save_debug_images", False)
+    save_raw = read_config.get("save_raw_images", save_debug)
     debug_dir = read_config.get("debug_image_dir", "/tmp/manometer-debug")
     
     # MQTT
@@ -325,6 +344,9 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
         )
         
         if image is not None:
+            if save_raw:
+                save_raw_image(image, debug_dir)
+
             reading = reader.read(
                 image,
                 use_median=True,

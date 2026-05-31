@@ -5,8 +5,5 @@ services:
     restart: unless-stopped
     volumes:
       - ./service/config.local.yaml:/app/config.yaml:ro
-      - debug-images:/tmp/manometer-debug
+      - ./debug-images:/tmp/manometer-debug
     network_mode: host   # Simplest for mDNS/.local resolution
-
-volumes:
-  debug-images:
