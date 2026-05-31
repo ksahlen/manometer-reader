@@ -91,7 +91,8 @@ esp32_camera:
   jpeg_quality: 10        # Lower = better quality (6-63)
   frame_buffer_count: 1
   max_framerate: 1fps
-  idle_framerate: 0.1fps
+  # Keep a reasonably fresh frame available for light-pulsed snapshots.
+  idle_framerate: 1fps
   vertical_flip: false
   horizontal_mirror: false
 

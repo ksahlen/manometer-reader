@@ -103,7 +103,7 @@ def set_backlight(
             data=b"",
             timeout=lighting_config.get("timeout", 5),
         ).raise_for_status()
-        logger.debug("Backlight %s", "on" if turn_on else "off")
+        logger.info("Backlight %s", "on" if turn_on else "off")
         return True
     except requests.RequestException as e:
         logger.warning("Failed to turn backlight %s: %s", "on" if turn_on else "off", e)
@@ -114,13 +114,24 @@ def capture_image_with_lighting(
     camera_url: str,
     camera_timeout: int,
     lighting_config: dict,
+    warmup_snapshots: int = 0,
+    warmup_delay_seconds: float = 1.0,
 ) -> np.ndarray | None:
     """Turn on configured light, capture a snapshot, and optionally turn it off."""
     if lighting_config.get("enabled", False):
         set_backlight(lighting_config, True, camera_url)
-        time.sleep(lighting_config.get("settle_seconds", 0.5))
+        settle_seconds = lighting_config.get("settle_seconds", 0.5)
+        logger.info("Waiting %.1fs for light/camera to settle", settle_seconds)
+        time.sleep(settle_seconds)
 
     try:
+        for index in range(max(0, int(warmup_snapshots))):
+            logger.info("Capturing warmup snapshot %s/%s", index + 1, warmup_snapshots)
+            capture_image(camera_url, timeout=camera_timeout)
+            if warmup_delay_seconds > 0:
+                time.sleep(warmup_delay_seconds)
+
+        logger.info("Capturing analysis snapshot")
         return capture_image(camera_url, timeout=camera_timeout)
     finally:
         if (
@@ -282,6 +293,8 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
     cam_url = cam_config.get("url", "http://manometer-cam.local:8080/")
     cam_timeout = cam_config.get("timeout", 10)
     image_rotation_degrees = cam_config.get("rotate_degrees", 0)
+    warmup_snapshots = cam_config.get("warmup_snapshots", 0)
+    warmup_delay_seconds = cam_config.get("warmup_delay_seconds", 1.0)
     lighting_config = config.get("lighting", {})
     
     # Gauge calibration
@@ -338,10 +351,12 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
     
     while running:
         image = capture_image_with_lighting(
-            cam_url,
-            cam_timeout,
-            lighting_config,
-        )
+        cam_url,
+        cam_timeout,
+        lighting_config,
+        warmup_snapshots=warmup_snapshots,
+        warmup_delay_seconds=warmup_delay_seconds,
+    )
         
         if image is not None:
             if save_raw:

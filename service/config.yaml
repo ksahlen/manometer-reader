@@ -7,6 +7,10 @@ camera:
   # Rotate image clockwise before analysis. Use 90 or 270 when the camera is
   # mounted sideways. ESPHome itself only flips/mirrors the camera image.
   rotate_degrees: 0
+  # Discard one or more snapshots after turning on the light so ESPHome has time
+  # to serve a fresh illuminated frame instead of a cached/dark frame.
+  warmup_snapshots: 1
+  warmup_delay_seconds: 1.0
 
 lighting:
   # Pulse the ESPHome WS2812B backlight before each snapshot.
@@ -14,12 +18,12 @@ lighting:
   base_url: "http://192.168.6.35"
   entity_name: "Backlight"
   # ESPHome web API uses 0-255 values for brightness and RGB.
-  brightness: 64
+  brightness: 128
   red: 255
   green: 255
   blue: 255
   transition: 0
-  settle_seconds: 0.5
+  settle_seconds: 3.0
   timeout: 5
   turn_off_after_snapshot: true
 

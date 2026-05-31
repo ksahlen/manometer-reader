@@ -82,15 +82,23 @@ so the reader normalizes snapshots before analysis.
 The VM can pulse the ESPHome backlight around each snapshot:
 
 ```yaml
+camera:
+  warmup_snapshots: 1
+  warmup_delay_seconds: 1.0
+
 lighting:
   enabled: true
-  brightness: 64
+  brightness: 128
   red: 255
   green: 255
   blue: 255
-  settle_seconds: 0.5
+  settle_seconds: 3.0
   turn_off_after_snapshot: true
 ```
+
+If the ESPHome firmware still uses a very low `idle_framerate`, increase
+`settle_seconds` temporarily, for example to `12.0`, so at least one fresh
+illuminated frame is available before the analysis snapshot is fetched.
 
 Test one snapshot from the VM:
 

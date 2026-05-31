@@ -59,6 +59,8 @@ def main() -> int:
         camera_url,
         timeout,
         lighting_config,
+        warmup_snapshots=camera_config.get("warmup_snapshots", 0),
+        warmup_delay_seconds=camera_config.get("warmup_delay_seconds", 1.0),
     )
     if image is None:
         print(
