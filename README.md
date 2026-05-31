@@ -68,7 +68,8 @@ Verify the camera works with:
 cp service/config.yaml service/config.local.yaml
 ```
 
-Edit `config.local.yaml` with your MQTT credentials. The default camera and
+Edit `config.local.yaml` with your MQTT credentials if your broker requires
+authentication. The default camera and
 MQTT hosts are currently set for this installation:
 
 - ESPHome camera: `http://192.168.6.35:8080/`

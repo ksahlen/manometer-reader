@@ -45,8 +45,9 @@ reading:
 mqtt:
   host: "192.168.4.11"
   port: 1883
-  username: "your_mqtt_user"
-  password: "your_mqtt_password"
+  # Leave blank if the broker does not require authentication.
+  username: ""
+  password: ""
   client_id: "manometer-reader"
   topic_prefix: "manometer"
   device_name: "Radiatortryck"
