@@ -247,6 +247,8 @@ class GaugeReader:
         # Score lines: prefer long lines that pass near center
         best_line = None
         best_score = 0.0
+        best_angle = None
+        best_line_length = 0.0
         
         for line in lines:
             x1, y1, x2, y2 = line[0]
@@ -262,39 +264,135 @@ class GaugeReader:
             
             if dist > radius * 0.15:
                 continue
+
+            # Start with the endpoint furthest from center, then compare that
+            # direction with its opposite direction using the thin-tip score.
+            d1 = math.sqrt((x1 - cx) ** 2 + (y1 - cy) ** 2)
+            d2 = math.sqrt((x2 - cx) ** 2 + (y2 - cy) ** 2)
+            if d1 > d2:
+                tip_x, tip_y = x1, y1
+            else:
+                tip_x, tip_y = x2, y2
             
-            score = length * (1.0 / (dist + 1))
+            raw_angle = self._angle_from_center(cx, cy, tip_x, tip_y)
+            opposite_angle = (raw_angle + 180.0) % 360.0
+            raw_tip_score = self._score_thin_needle_ray(
+                thresh, mask, cx, cy, radius, raw_angle
+            )
+            opposite_tip_score = self._score_thin_needle_ray(
+                thresh, mask, cx, cy, radius, opposite_angle
+            )
+
+            if opposite_tip_score > raw_tip_score:
+                candidate_angle = opposite_angle
+                tip_score = opposite_tip_score
+            else:
+                candidate_angle = raw_angle
+                tip_score = raw_tip_score
+
+            score = (length / (dist + 1)) * (0.15 + 3.0 * tip_score)
+            if not self._angle_in_scale_sweep(candidate_angle, margin_deg=10.0):
+                score *= 0.15
+
             if score > best_score:
                 best_score = score
                 best_line = line[0]
+                best_angle = candidate_angle
+                best_line_length = length
         
-        if best_line is None:
+        if best_line is None or best_angle is None:
             return None
         
-        x1, y1, x2, y2 = best_line
+        # Confidence based on line length relative to radius
+        confidence = min(1.0, best_line_length / (radius * 0.6))
         
-        # Determine tip direction (further from center)
-        d1 = math.sqrt((x1 - cx) ** 2 + (y1 - cy) ** 2)
-        d2 = math.sqrt((x2 - cx) ** 2 + (y2 - cy) ** 2)
-        
-        if d1 > d2:
-            tip_x, tip_y = x1, y1
-        else:
-            tip_x, tip_y = x2, y2
-        
-        # Angle: 0=up, clockwise positive
-        dx = tip_x - cx
-        dy = tip_y - cy
-        angle_rad = math.atan2(dx, -dy)
+        return best_angle, best_line, confidence, thresh
+
+    @staticmethod
+    def _angle_from_center(cx: int, cy: int, x: int, y: int) -> float:
+        """Calculate angle where 0=up and clockwise is positive."""
+        angle_rad = math.atan2(x - cx, -(y - cy))
         angle_deg = math.degrees(angle_rad)
         if angle_deg < 0:
             angle_deg += 360
-        
-        # Confidence based on line length relative to radius
-        line_length = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
-        confidence = min(1.0, line_length / (radius * 0.6))
-        
-        return angle_deg, best_line, confidence, thresh
+        return angle_deg
+
+    def _angle_in_scale_sweep(self, angle_deg: float, margin_deg: float = 0.0) -> bool:
+        """Return true if an angle is plausibly on the calibrated gauge scale."""
+        shifted = angle_deg - self.calibration.angle_0bar
+        if shifted < 0:
+            shifted += 360
+        return shifted <= self.calibration.total_sweep + margin_deg
+
+    @staticmethod
+    def _score_thin_needle_ray(thresh, mask, cx, cy, radius, angle_deg: float) -> float:
+        """
+        Score how much a ray looks like the thin measuring needle tip.
+
+        The counterweight/back end of this gauge is broad and dark. A true
+        measuring tip is a narrow dark feature that continues toward the outer
+        tick marks, so this score rewards a dark core with lighter side bands
+        and weights the outer half of the ray more heavily.
+        """
+        angle_rad = math.radians(angle_deg)
+        ux = math.sin(angle_rad)
+        uy = -math.cos(angle_rad)
+        px = math.cos(angle_rad)
+        py = math.sin(angle_rad)
+
+        core_half_width = max(2, int(radius * 0.010))
+        side_inner = max(core_half_width + 3, int(radius * 0.025))
+        side_outer = max(side_inner + 5, int(radius * 0.060))
+
+        weighted_scores = []
+        weights = []
+        outer_hits = 0
+        outer_samples = 0
+        start_r = radius * 0.18
+        end_r = radius * 0.82
+
+        for rr in np.linspace(start_r, end_r, 170):
+            core_values = []
+            side_values = []
+
+            for offset in range(-side_outer, side_outer + 1, 2):
+                x = int(round(cx + ux * rr + px * offset))
+                y = int(round(cy + uy * rr + py * offset))
+                if not (0 <= x < thresh.shape[1] and 0 <= y < thresh.shape[0]):
+                    continue
+                if mask[y, x] == 0:
+                    continue
+
+                dark = 1.0 if thresh[y, x] > 0 else 0.0
+                if abs(offset) <= core_half_width:
+                    core_values.append(dark)
+                elif side_inner <= abs(offset) <= side_outer:
+                    side_values.append(dark)
+
+            if not core_values:
+                continue
+
+            core_fraction = sum(core_values) / len(core_values)
+            side_fraction = sum(side_values) / len(side_values) if side_values else 0.0
+            thin_score = max(0.0, core_fraction * (1.0 - side_fraction))
+            radius_fraction = (rr - start_r) / (end_r - start_r)
+            weight = 0.35 + 0.65 * radius_fraction
+            weighted_scores.append(thin_score * weight)
+            weights.append(weight)
+
+            if rr >= radius * 0.52:
+                outer_samples += 1
+                if core_fraction > 0.30 and side_fraction < 0.65:
+                    outer_hits += 1
+
+        if not weighted_scores:
+            return 0.0
+
+        outer_coverage = outer_hits / max(1, outer_samples)
+        return float(
+            (sum(weighted_scores) / sum(weights))
+            * min(1.0, outer_coverage * 2.5)
+        )
     
     def _draw_debug(self, img, cx, cy, radius, angle, bar, line, confidence):
         """Generate annotated debug image."""

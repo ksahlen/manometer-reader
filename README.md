@@ -257,8 +257,9 @@ manometer-reader/
 3. **CLAHE** — normalizes contrast to handle glare and uneven lighting
 4. **Adaptive threshold** — extracts dark features (needle, text, markings)
 5. **Hough line detection** — finds straight lines passing near the center
-6. **Angle calculation** — picks the best line, determines tip direction, calculates angle
-7. **Median filter** — smooths readings over a sliding window
+6. **Thin-tip scoring** — prefers the narrow measuring tip over the broad counterweight
+7. **Angle calculation** — calculates the tip angle
+8. **Median filter** — smooths readings over a sliding window
 
 ## License
 
