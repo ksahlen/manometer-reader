@@ -226,6 +226,11 @@ To calibrate: enable `save_debug_images: true`, observe the reported `needle_ang
 
 Sensors appear automatically under MQTT integration after the first reading. Optional template sensors and automations (low/high pressure alerts) are in `homeassistant/`.
 
+## Operations
+
+The current live deployment state, VM commands, local configuration expectations,
+and troubleshooting notes are documented in `docs/operations.md`.
+
 ## Project structure
 
 ```
@@ -243,6 +248,8 @@ manometer-reader/
 ├── homeassistant/
 │   ├── configuration.yaml        # Template sensors
 │   └── automations.yaml          # Alert automations
+├── docs/
+│   └── operations.md             # Current deployment and runbook notes
 ├── systemd/
 │   └── manometer-reader.service
 ├── docker-compose.yml
