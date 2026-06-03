@@ -269,6 +269,91 @@ def save_raw_image(image: np.ndarray, output_dir: str):
     return save_image_artifact(image, output_dir, "raw")
 
 
+def should_accept_pressure_reading(
+    reading,
+    last_accepted_pressure: float | None,
+    jump_state: dict,
+    read_config: dict,
+) -> tuple[bool, str, bool]:
+    """Return whether a raw pressure reading is plausible enough to publish."""
+    pressure = reading.pressure_bar
+    max_plausible = read_config.get("max_plausible_bar", 1.8)
+    if max_plausible is not None and pressure > float(max_plausible):
+        jump_state.clear()
+        return (
+            False,
+            f"implausible pressure {pressure:.2f} bar > "
+            f"{float(max_plausible):.2f} bar",
+            False,
+        )
+
+    if last_accepted_pressure is None:
+        jump_state.clear()
+        return True, "", False
+
+    max_jump = float(read_config.get("max_jump_bar", 0.45))
+    if max_jump <= 0:
+        jump_state.clear()
+        return True, "", False
+
+    jump = abs(pressure - last_accepted_pressure)
+    if jump <= max_jump:
+        jump_state.clear()
+        return True, "", False
+
+    required_count = max(1, int(read_config.get("jump_confirmation_count", 2)))
+    if required_count <= 1:
+        jump_state.clear()
+        return True, "", True
+
+    tolerance = float(read_config.get("jump_confirmation_tolerance_bar", 0.12))
+    pending_pressure = jump_state.get("pressure")
+    pending_count = int(jump_state.get("count", 0))
+    same_pending_jump = (
+        pending_pressure is not None
+        and abs(pressure - pending_pressure) <= tolerance
+        and (pressure - last_accepted_pressure)
+        * (pending_pressure - last_accepted_pressure)
+        > 0
+    )
+
+    if same_pending_jump:
+        pending_count += 1
+    else:
+        pending_count = 1
+
+    jump_state["pressure"] = pressure
+    jump_state["count"] = pending_count
+
+    if pending_count >= required_count:
+        jump_state.clear()
+        return (
+            True,
+            f"confirmed pressure jump from {last_accepted_pressure:.2f} "
+            f"to {pressure:.2f} bar",
+            True,
+        )
+
+    return (
+        False,
+        f"unconfirmed pressure jump from {last_accepted_pressure:.2f} "
+        f"to {pressure:.2f} bar",
+        False,
+    )
+
+
+def apply_accepted_median_filter(
+    reading,
+    pressure_history: list[float],
+    median_window: int,
+) -> None:
+    """Median-filter accepted raw readings in-place before publishing."""
+    pressure_history.append(reading.pressure_bar)
+    if len(pressure_history) > median_window:
+        pressure_history[:] = pressure_history[-median_window:]
+    reading.pressure_bar = round(float(np.median(pressure_history)), 2)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command-line arguments for local and VM runs."""
     parser = argparse.ArgumentParser(description="Run the manometer reader service.")
@@ -309,6 +394,7 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
     read_config = config.get("reading", {})
     interval = read_config.get("interval_seconds", 300)
     min_confidence = read_config.get("min_confidence", 0.3)
+    median_window = max(1, int(read_config.get("median_window", 5)))
     save_debug = read_config.get("save_debug_images", False)
     save_raw = read_config.get("save_raw_images", save_debug)
     debug_dir = read_config.get("debug_image_dir", "/tmp/manometer-debug")
@@ -326,7 +412,7 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
         calibration=calibration,
         image_rotation_degrees=image_rotation_degrees,
     )
-    reader.median_window = read_config.get("median_window", 5)
+    reader.median_window = median_window
     
     # Graceful shutdown
     running = True
@@ -343,20 +429,24 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
         "Starting manometer reader "
         f"(interval={interval}s, camera={cam_url}, "
         f"rotation={reader.image_rotation_degrees}°, "
-        f"lighting={'on' if lighting_config.get('enabled', False) else 'off'})"
+        f"lighting={'on' if lighting_config.get('enabled', False) else 'off'}, "
+        f"max_plausible={read_config.get('max_plausible_bar', 1.8)} bar)"
     )
     
     consecutive_failures = 0
     max_failures = 10
+    accepted_pressure_history: list[float] = []
+    last_accepted_pressure: float | None = None
+    jump_state: dict = {}
     
     while running:
         image = capture_image_with_lighting(
-        cam_url,
-        cam_timeout,
-        lighting_config,
-        warmup_snapshots=warmup_snapshots,
-        warmup_delay_seconds=warmup_delay_seconds,
-    )
+            cam_url,
+            cam_timeout,
+            lighting_config,
+            warmup_snapshots=warmup_snapshots,
+            warmup_delay_seconds=warmup_delay_seconds,
+        )
         
         if image is not None:
             if save_raw:
@@ -364,11 +454,41 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
 
             reading = reader.read(
                 image,
-                use_median=True,
+                use_median=False,
                 generate_debug=save_debug,
             )
             
-            if reading and reading.confidence >= min_confidence:
+            skip_reason = ""
+            accept_note = ""
+            reset_median_history = False
+            if reading is None:
+                skip_reason = "detection failed"
+            elif reading.confidence < min_confidence:
+                skip_reason = "low confidence"
+            else:
+                accepted, accept_note, reset_median_history = (
+                    should_accept_pressure_reading(
+                        reading,
+                        last_accepted_pressure,
+                        jump_state,
+                        read_config,
+                    )
+                )
+                if not accepted:
+                    skip_reason = accept_note
+
+            if reading and not skip_reason:
+                raw_pressure = reading.pressure_bar
+                if accept_note:
+                    logger.info(accept_note)
+                last_accepted_pressure = raw_pressure
+                if reset_median_history:
+                    accepted_pressure_history.clear()
+                apply_accepted_median_filter(
+                    reading,
+                    accepted_pressure_history,
+                    median_window,
+                )
                 publish_reading(client, f"{topic_prefix}/state", reading)
                 consecutive_failures = 0
                 
@@ -376,8 +496,7 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
                     save_debug_image(reading.debug_image, debug_dir)
             else:
                 consecutive_failures += 1
-                reason = "low confidence" if reading else "detection failed"
-                logger.warning(f"Skipped reading ({reason}), "
+                logger.warning(f"Skipped reading ({skip_reason}), "
                                f"failures={consecutive_failures}/{max_failures}")
         else:
             consecutive_failures += 1

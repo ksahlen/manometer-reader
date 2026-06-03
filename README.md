@@ -131,6 +131,18 @@ reading:
 
 With Docker Compose, these files appear on the VM under `./debug-images/`.
 
+The reader also rejects implausible radiator-circuit values before publishing
+to MQTT. Values above `reading.max_plausible_bar` default to being skipped, and
+large jumps must be confirmed by repeated readings:
+
+```yaml
+reading:
+  max_plausible_bar: 1.8
+  max_jump_bar: 0.45
+  jump_confirmation_count: 2
+  jump_confirmation_tolerance_bar: 0.12
+```
+
 ### 3. Run with Docker (recommended)
 
 Docker Compose is the preferred VM deployment path. It keeps Python/OpenCV

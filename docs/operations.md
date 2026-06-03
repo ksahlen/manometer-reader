@@ -25,7 +25,9 @@ The service is run in pull mode:
 5. Turn off backlight.
 6. Rotate image 90 degrees clockwise.
 7. Detect the gauge face and the narrow measuring needle tip.
-8. Publish pressure to MQTT for Home Assistant discovery sensors.
+8. Reject implausible radiator-circuit values and unconfirmed jumps.
+9. Median-filter accepted readings.
+10. Publish pressure to MQTT for Home Assistant discovery sensors.
 
 The gauge has a broad counterweight on the opposite side of the needle. The
 reader must use the narrow needle tip, not the broad black back end.
@@ -58,6 +60,10 @@ lighting:
 
 reading:
   interval_seconds: 900
+  max_plausible_bar: 1.8
+  max_jump_bar: 0.45
+  jump_confirmation_count: 2
+  jump_confirmation_tolerance_bar: 0.12
   save_debug_images: false
   save_raw_images: false
 
@@ -161,6 +167,9 @@ Published: 1.04 bar
 
 After the thin-tip scoring change, local tests against live snapshots produced
 approximately `1.04-1.05 bar`.
+
+The radiator circuit should not publish 3 bar. Readings above 1.8 bar are
+treated as implausible image interpretation errors and skipped.
 
 ## Safety And Publishing
 

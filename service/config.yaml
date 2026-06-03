@@ -40,6 +40,13 @@ reading:
   interval_seconds: 900
   # Minimum detection confidence (0-1) to accept a reading
   min_confidence: 0.3
+  # Radiator circuit readings above this are treated as OCR/CV errors.
+  # The safety valve opens around 1.5 bar, so 1.8 leaves a small margin.
+  max_plausible_bar: 1.8
+  # Require repeated confirmation for large jumps between accepted readings.
+  max_jump_bar: 0.45
+  jump_confirmation_count: 2
+  jump_confirmation_tolerance_bar: 0.12
   # Number of readings to median-filter over
   median_window: 5
   # Save annotated debug images

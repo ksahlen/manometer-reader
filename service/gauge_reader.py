@@ -102,6 +102,13 @@ class GaugeReader:
             return None
         
         angle, line, confidence, thresh = result
+
+        if not self._angle_in_scale_sweep(angle):
+            logger.warning(
+                "Detected angle %.1f° is outside calibrated gauge sweep",
+                angle,
+            )
+            return None
         
         # Step 4: Convert angle to bar
         bar = self.calibration.angle_to_bar(angle)
