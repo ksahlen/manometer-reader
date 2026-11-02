@@ -303,7 +303,7 @@ class GaugeReader:
 
             if score > best_score:
                 best_score = score
-                best_line = line[0]
+                best_line = line
                 best_angle = candidate_angle
                 best_line_length = length
         
