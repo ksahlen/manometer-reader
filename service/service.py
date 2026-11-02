@@ -13,7 +13,7 @@ import sys
 import logging
 import argparse
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import quote, urlsplit
 
 import cv2
@@ -226,7 +226,7 @@ def publish_reading(client: mqtt.Client, topic: str, reading):
         "pressure_bar": reading.pressure_bar,
         "needle_angle_deg": reading.needle_angle_deg,
         "confidence": reading.confidence,
-        "timestamp": datetime.now().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
     
     client.publish(topic, json.dumps(payload), retain=True)
@@ -508,7 +508,7 @@ def main(config_path: str = "config.yaml", run_once: bool = False):
             client.publish(f"{topic_prefix}/state", json.dumps({
                 "pressure_bar": None,
                 "error": "consecutive_failures",
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
             }), retain=True)
             consecutive_failures = 0
         
