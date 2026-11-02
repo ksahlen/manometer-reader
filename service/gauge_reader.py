@@ -257,8 +257,8 @@ class GaugeReader:
         best_angle = None
         best_line_length = 0.0
         
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
+        for line in lines.reshape(-1, 4):
+            x1, y1, x2, y2 = line
             length = math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
             
             # Point-to-line distance from center
